@@ -29,7 +29,6 @@ class NCF:
         Args:
             n_users (int): Number of users in the dataset.
             n_items (int): Number of items in the dataset.
-            model_type (str): Model type.
             n_factors (int): Dimension of latent space.
             layer_sizes (list): Number of layers for MLP.
             n_epochs (int): Number of epochs for training.
@@ -210,6 +209,12 @@ class NCF:
             self.optimizer = tf.compat.v1.train.AdamOptimizer(
                 learning_rate=self.learning_rate
             ).minimize(self.loss)
+
+    def get_weights(self):
+        return tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+
+    def set_weights(self, weights):
+        tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES = weights
 
     def save(self, dir_name):
         """Save model parameters in `dir_name`
