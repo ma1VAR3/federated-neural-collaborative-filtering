@@ -243,7 +243,7 @@ class NCF:
         """
 
         # load pre-trained model
-   
+
 
         if neumf_dir is not None:
             saver = tf.compat.v1.train.Saver()
