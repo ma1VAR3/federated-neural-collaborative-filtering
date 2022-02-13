@@ -12,6 +12,6 @@ The dataset used in this implementation is [MovieLens 100k](https://grouplens.or
 
 `config.ini` contains parameters used for the federated setting and training.
 
-<img src="ncf_img.png" alt="drawing" width="600" margin="auto" style="display:block;float:none;margin-left:automargin-right:auto"/>
+<img src="ncf_img.png" alt="drawing" width="600" margin="auto" align="center"/>
 
 NOTE: This repository only contains the implementation of the MF-FedAvg algorithm.
