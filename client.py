@@ -20,6 +20,10 @@ class Client:
     def set_weights(self, weights):
         self.model.set_weights(weights)
 
+    def get_weights(self):
+        return self.model.get_weights()
+
     def fit(self, epochs, batch_size):
-        self.model.fit(self.data['user_input'], self.data['item_input'], self['labels'], epochs, batch_size)
+        
+        self.model.fit(self.data['user_input'], self.data['item_input'], self.data['labels'], epochs, batch_size)
     

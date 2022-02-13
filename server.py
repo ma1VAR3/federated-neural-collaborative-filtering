@@ -110,19 +110,20 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
 
     hits = []
     for r in range(rounds):
-
+        print("Starting round" + str(r+1))
         client_wts = []
         client_item_profiles = []
-
+        cid = 0
         for client in clients:
+            print("Training client " + str(cid))
             client.set_weights(server_wt)
-            client.fit()
+            client.fit(epochs, batch_size)
             client_wts.append(client.get_weights())
 
         # server_wt = ml_fedavg(client_wts)
         server_model.set_weights(server_wt)
         
-        hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model, K=10)
+        hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model.model, K=10)
         hit = np.mean(hit_lst)
         hits.append(hit)
 
