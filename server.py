@@ -10,7 +10,15 @@ from recommenders.models.ncf.dataset import Dataset as NCFDataset
 
 
 def ml_fedavg(client_wts):
-    pass
+    average_weight_list=[]
+    for index1 in range(len(client_wts[0])):
+        layer_weights=[]
+        for index2 in range(len(client_wts)):
+            weights=client_wts[index2][index1]
+            layer_weights.append(weights)
+        average_weight=np.mean(np.array([x for x in layer_weights]), axis=0)
+        average_weight_list.append(average_weight)
+    return average_weight_list
 
 
 def distribute_client_data(data, items, users, n_clients, loader, num_neg):
@@ -110,7 +118,7 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
 
     hits = []
     for r in range(rounds):
-        print("Starting round" + str(r+1))
+        print("Starting round " + str(r+1))
         client_wts = []
         client_item_profiles = []
         cid = 0
@@ -119,13 +127,16 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
             client.set_weights(server_wt)
             client.fit(epochs, batch_size)
             client_wts.append(client.get_weights())
-
-        # server_wt = ml_fedavg(client_wts)
+            cid += 1
+        
+        server_wt = ml_fedavg(client_wts)
         server_model.set_weights(server_wt)
         
         hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model.model, K=10)
         hit = np.mean(hit_lst)
         hits.append(hit)
+    
+    return hits
 
 if __name__=="__main__":
     config = configparser.ConfigParser()
@@ -145,5 +156,8 @@ if __name__=="__main__":
         header=["userID", "itemID", "rating", "timestamp"]
     )
 
-    train_server(seed, epochs, batch_size, rounds, n_clients)
+    hits = train_server(seed, epochs, batch_size, rounds, n_clients)
     
+    with open('hit_rate.npy', 'wb') as f:
+        np.save(f, hits)
+    f.close()
