@@ -70,3 +70,6 @@ class NeuMF:
 
     def set_weights(self, weights):
         self.model.set_weights(weights)
+
+    def fit(self, user_data, item_data, labels, epochs, batch_size):
+        self.model.fit([user_data, item_data], labels, epochs=epochs, batch_size=batch_size)
