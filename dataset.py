@@ -1,308 +1,142 @@
-import random
-import numpy as np
+import os
 import pandas as pd
-import warnings
+import numpy as np
 
-from recommenders.utils.constants import (
-    DEFAULT_ITEM_COL,
-    DEFAULT_USER_COL,
-    DEFAULT_RATING_COL,
-    DEFAULT_TIMESTAMP_COL,
-)
+class Loader():
+
+    def __init__(self):
+        pass
+
+    def load_dataset(self):
+        
+        df = pd.read_csv('./ratings.csv')
+        print(df.columns)
+        df = df.drop(['timestamp'], axis=1)
+        df.columns = ['user', 'item', 'rating']
+        df = df.dropna()
+        df = df.loc[df.rating != 0]
 
 
-class Dataset(object):
-    """Dataset class for NCF"""
+        df_count = df.groupby(['user']).count()
+        df['count'] = df.groupby('user')['user'].transform('count')
+        df = df[df['count'] > 1]
 
-    def __init__(
-        self,
-        train,
-        test=None,
-        n_neg=4,
-        n_neg_test=100,
-        col_user=DEFAULT_USER_COL,
-        col_item=DEFAULT_ITEM_COL,
-        col_rating=DEFAULT_RATING_COL,
-        col_timestamp=DEFAULT_TIMESTAMP_COL,
-        binary=True,
-        seed=None,
-    ):
-        """Constructor
-        Args:
-            train (pandas.DataFrame): Training data with at least columns (col_user, col_item, col_rating).
-            test (pandas.DataFrame): Test data with at least columns (col_user, col_item, col_rating). test can be None,
-                if so, we only process the training data.
-            n_neg (int): Number of negative samples for training set.
-            n_neg_test (int): Number of negative samples for test set.
-            col_user (str): User column name.
-            col_item (str): Item column name.
-            col_rating (str): Rating column name.
-            col_timestamp (str): Timestamp column name.
-            binary (bool): If true, set rating > 0 to rating = 1.
-            seed (int): Seed.
+        
+        df['user_id'] = df['user'].astype("category").cat.codes
+        df['item_id'] = df['item'].astype("category").cat.codes
+
+        # lookup 테이블 생성
+        item_lookup = df[['item_id', 'item']].drop_duplicates()
+        item_lookup['item_id'] = item_lookup.item_id.astype(str)
+
+        # train, test 데이터 생성
+        df = df[['user_id', 'item_id', 'rating']]
+        
+
+        # 전체 user, item 리스트 생성
+        users = list(np.sort(df.user_id.unique()))
+        items = list(np.sort(df.item_id.unique()))
+
+        # train user, item 리스트 생성
+        
+        
+        # 각 user 마다 negative item 생성
+        
+
+        return df, items, users
+        # return uids, iids, df_train, df_test, df_neg, users, items, item_lookup
+
+    def get_samples(self, df, items):
+
+        
+        rows = df['user_id'].astype(int)
+        cols = df['item_id'].astype(int)
+        values = list(df.rating)
+
+        uids = np.array(rows.tolist())
+        iids = np.array(cols.tolist())
+
+        df_neg = self.get_negatives(uids, iids, items, df)
+
+        return uids, iids
+
+    def get_negatives(self, uids, iids, items, df_test):
         """
-        # initialize user and item index
-        self.user_idx = None
-        self.item_idx = None
-        # set negative sampling for training and test
-        self.n_neg = n_neg
-        self.n_neg_test = n_neg_test
-        # get col name of user, item and rating
-        self.col_user = col_user
-        self.col_item = col_item
-        self.col_rating = col_rating
-        self.col_timestamp = col_timestamp
-        # data preprocessing for training and test data
-        self.train, self.test = self._data_processing(train, test, binary)
-        # initialize negative sampling for training and test data
-        self._init_train_data()
-        self._init_test_data()
-        # set random seed
-        random.seed(seed)
-
-    def _data_processing(self, train, test, binary):
-        """Process the dataset to reindex userID and itemID, also set rating as binary feedback
-        Args:
-            train (pandas.DataFrame): Training data with at least columns (col_user, col_item, col_rating).
-            test (pandas.DataFrame): Test data with at least columns (col_user, col_item, col_rating)
-                    test can be None, if so, we only process the training data.
-            binary (bool): If true, set rating>0 to rating = 1.
-        Returns:
-            list: train and test pandas.DataFrame Dataset, which have been reindexed.
+        negative item 리스트 생성함수
         """
-        # If testing dataset is None
-        df = train if test is None else train.append(test)
+        negativeList = []
+        test_u = df_test['user_id'].values.tolist()
+        test_i = df_test['item_id'].values.tolist()
 
-        # Reindex user and item index
-        if self.user_idx is None:
-            # Map user id
-            user_idx = df[[self.col_user]].drop_duplicates().reindex()
-            user_idx[self.col_user + "_idx"] = np.arange(len(user_idx))
-            self.n_users = len(user_idx)
-            self.user_idx = user_idx
+        test_ratings = list(zip(test_u, test_i))  # test (user, item)세트
+        zipped = set(zip(uids, iids))             # train (user, item)세트
 
-            self.user2id = dict(
-                zip(user_idx[self.col_user], user_idx[self.col_user + "_idx"])
-            )
-            self.id2user = {self.user2id[k]: k for k in self.user2id}
+        for (u, i) in test_ratings:
 
-        if self.item_idx is None:
-            # Map item id
-            item_idx = df[[self.col_item]].drop_duplicates()
-            item_idx[self.col_item + "_idx"] = np.arange(len(item_idx))
-            self.n_items = len(item_idx)
-            self.item_idx = item_idx
+            negatives = []
+            negatives.append((u, i))
+            for t in range(100):
+                j = np.random.randint(len(items))     # neg_item j 1개 샘플링
+                while (u, j) in zipped:               # j가 train에 있으면 다시뽑고, 없으면 선택
+                    j = np.random.randint(len(items))
+                negatives.append(j)
+            negativeList.append(negatives) # [(0,pos), neg, neg, ...]
 
-            self.item2id = dict(
-                zip(item_idx[self.col_item], item_idx[self.col_item + "_idx"])
-            )
-            self.id2item = {self.item2id[k]: k for k in self.item2id}
+        df_neg = pd.DataFrame(negativeList)
 
-        return self._reindex(train, binary), self._reindex(test, binary)
+        return df_neg
 
-    def _reindex(self, df, binary):
-        """Process dataset to reindex userID and itemID, also set rating as binary feedback
-        Args:
-            df (pandas.DataFrame): dataframe with at least columns (col_user, col_item, col_rating)
-            binary (bool): if true, set rating>0 to rating = 1
-        Returns:
-            list: train and test pandas.DataFrame Dataset, which have been reindexed.
+    def mask_first(self, x):
+
+        result = np.ones_like(x)
+        result[0] = 0  # [0,1,1,....]
+
+        return result
+
+    def train_test_split(self, df):
         """
-
-        # If testing dataset is None
-        if df is None:
-            return None
-
-        # Map user_idx and item_idx
-        df = pd.merge(df, self.user_idx, on=self.col_user, how="left")
-        df = pd.merge(df, self.item_idx, on=self.col_item, how="left")
-
-        # If binary feedback, set rating as 1.0 or 0.0
-        if binary:
-            df[self.col_rating] = df[self.col_rating].apply(lambda x: float(x > 0))
-
-        # Select relevant columns
-        df_reindex = df[
-            [self.col_user + "_idx", self.col_item + "_idx", self.col_rating]
-        ]
-        df_reindex.columns = [self.col_user, self.col_item, self.col_rating]
-
-        return df_reindex
-
-    def _init_train_data(self):
-        """Return all negative items (in train dataset) and store them in self.interact_status[self.col_item + '_negative']
-        store train dataset in self.users, self.items and self.ratings
+        train, test 나누는 함수
         """
+        df_test = df.copy(deep=True)
+        df_train = df.copy(deep=True)
 
-        self.item_pool = set(self.train[self.col_item].unique())
-        self.interact_status = (
-            self.train.groupby(self.col_user)[self.col_item]
-            .apply(set)
-            .reset_index()
-            .rename(columns={self.col_item: self.col_item + "_interacted"})
-        )
-        self.interact_status[self.col_item + "_negative"] = self.interact_status[
-            self.col_item + "_interacted"
-        ].apply(lambda x: self.item_pool - x)
+        # df_test
+        # user_id와 holdout_item_id(user가 플레이한 아이템 중 1개)뽑기
+        df_test = df_test.groupby(['user_id']).first()
+        df_test['user_id'] = df_test.index
+        df_test = df_test[['user_id', 'item_id', 'plays']]
+        df_test = df_test.reset_index(drop=True)
 
-        self.users, self.items, self.ratings = [], [], []
+        # df_train
+        # user_id 리스트에 make_first()적용
+        mask = df.groupby(['user_id'])['user_id'].transform(self.mask_first).astype(bool)
+        df_train = df.loc[mask]
 
-        # sample n_neg negative samples for training
-        for row in self.train.itertuples():
-            self.users.append(int(getattr(row, self.col_user)))
-            self.items.append(int(getattr(row, self.col_item)))
-            self.ratings.append(float(getattr(row, self.col_rating)))
+        return df_train, df_test
 
-        self.users = np.array(self.users)
-        self.items = np.array(self.items)
-        self.ratings = np.array(self.ratings)
-
-    def _init_test_data(self):
-        """Initialize self.test using 'leave-one-out' evaluation protocol in
-        paper https://www.comp.nus.edu.sg/~xiangnan/papers/ncf.pdf
+    def get_train_instances(self, uids, iids, num_neg, num_items):
         """
-        if self.test is not None:
-            # get test positive set for every user
-            test_interact_status = (
-                self.test.groupby(self.col_user)[self.col_item]
-                .apply(set)
-                .reset_index()
-                .rename(columns={self.col_item: self.col_item + "_interacted_test"})
-            )
-
-            # get negative pools for every user based on training and test interactions
-            test_interact_status = pd.merge(
-                test_interact_status, self.interact_status, on=self.col_user, how="left"
-            )
-            test_interact_status[
-                self.col_item + "_negative"
-            ] = test_interact_status.apply(
-                lambda row: row[self.col_item + "_negative"]
-                - row[self.col_item + "_interacted_test"],
-                axis=1,
-            )
-            test_ratings = pd.merge(
-                self.test,
-                test_interact_status[[self.col_user, self.col_item + "_negative"]],
-                on=self.col_user,
-                how="left",
-            )
-
-            # sample n_neg_test negative samples for testing
-            try:
-                test_ratings[self.col_item + "_negative"] = test_ratings[
-                    self.col_item + "_negative"
-                ].apply(lambda x: random.sample(x, self.n_neg_test))
-
-            except Exception:
-                min_num = min(map(len, list(test_ratings[self.col_item + "_negative"])))
-                warnings.warn(
-                    "n_neg_test is larger than negative items set size! We will set n_neg as the smallest size: %d"
-                    % min_num
-                )
-                test_ratings[self.col_item + "_negative"] = test_ratings[
-                    self.col_item + "_negative"
-                ].apply(lambda x: random.sample(x, min_num))
-
-            self.test_data = []
-
-            # generate test data
-            for row in test_ratings.itertuples():
-                self.test_users, self.test_items, self.test_ratings = [], [], []
-
-                self.test_users.append(int(getattr(row, self.col_user)))
-                self.test_items.append(int(getattr(row, self.col_item)))
-                self.test_ratings.append(float(getattr(row, self.col_rating)))
-
-                for i in getattr(row, self.col_item + "_negative"):
-                    self.test_users.append(int(getattr(row, self.col_user)))
-                    self.test_items.append(int(i))
-                    self.test_ratings.append(float(0))
-
-                self.test_data.append(
-                    [
-                        [self.id2user[x] for x in self.test_users],
-                        [self.id2item[x] for x in self.test_items],
-                        self.test_ratings,
-                    ]
-                )
-
-    def negative_sampling(self):
-        """Sample n_neg negative items per positive item, this function should be called every epoch."""
-        self.users, self.items, self.ratings = [], [], []
-
-        # sample n_neg negative samples for training
-        train_ratings = pd.merge(
-            self.train,
-            self.interact_status[[self.col_user, self.col_item + "_negative"]],
-            on=self.col_user,
-        )
-
-        try:
-            train_ratings[self.col_item + "_negative"] = train_ratings[
-                self.col_item + "_negative"
-            ].apply(lambda x: random.sample(x, self.n_neg))
-        except Exception:
-            min_num = min(map(len, list(train_ratings[self.col_item + "_negative"])))
-            warnings.warn(
-                "n_neg is larger than negative items set size! We will set n_neg as the smallest size: %d"
-                % min_num
-            )
-            train_ratings[self.col_item + "_negative"] = train_ratings[
-                self.col_item + "_negative"
-            ].apply(lambda x: random.sample(x, min_num))
-
-        # generate training data
-        for row in train_ratings.itertuples():
-            self.users.append(int(getattr(row, self.col_user)))
-            self.items.append(int(getattr(row, self.col_item)))
-            self.ratings.append(float(getattr(row, self.col_rating)))
-            for i in getattr(row, self.col_item + "_negative"):
-                self.users.append(int(getattr(row, self.col_user)))
-                self.items.append(int(i))
-                self.ratings.append(float(0))
-
-        self.users = np.array(self.users)
-        self.items = np.array(self.items)
-        self.ratings = np.array(self.ratings)
-
-    def train_loader(self, batch_size, shuffle=True):
-        """Feed train data every batch.
-        Args:
-            batch_size (int): Batch size.
-            shuffle (bool): Ff true, train data will be shuffled.
-        Yields:
-            list: A list of userID list, itemID list, and rating list. Public data loader returns the userID, itemID consistent with raw data.
+        모델에 사용할 train 데이터 생성 함수
         """
-        # yield batch of training data with `shuffle`
-        indices = np.arange(len(self.users))
-        if shuffle:
-            random.shuffle(indices)
-        for i in range(len(indices) // batch_size):
-            begin_idx = i * batch_size
-            end_idx = (i + 1) * batch_size
-            batch_indices = indices[begin_idx:end_idx]
+        user_input, item_input, labels = [],[],[]
+        zipped = set(zip(uids, iids)) # train (user, item) 세트
 
-            # train_loader() could be called and used by our users in other situations,
-            # who expect the not re-indexed data. So we convert id --> original user and item
-            # when returning batch
-            yield [
-                [self.id2user[x] for x in self.users[batch_indices]],
-                [self.id2item[x] for x in self.items[batch_indices]],
-                self.ratings[batch_indices],
-            ]
+        for (u, i) in zip(uids, iids):
 
-    def test_loader(self):
-        """Feed leave-one-out data every user
-        Generate test batch by every positive test instance,
-        (eg. [1, 2, 1] is a positive user & item pair in test set
-        ([userID, itemID, rating] for this tuple). This function
-        returns like [[1, 2, 1], [1, 3, 0], [1,6, 0], ...],
-        ie. following our *leave-one-out* evaluation protocol.
-        Returns:
-            list: userID list, itemID list, rating list.
-            public data loader return the userID, itemID consistent with raw data
-            the first (userID, itemID, rating) is the positive one
-        """
-        for test in self.test_data:
-            yield test
+            # pos item 추가
+            user_input.append(u)  # [u]
+            item_input.append(i)  # [pos_i]
+            labels.append(1)      # [1]
+
+            # neg item 추가
+            for t in range(num_neg):
+
+                j = np.random.randint(num_items)      # neg_item j num_neg 개 샘플링
+                while (u, j) in zipped:               # u가 j를 이미 선택했다면
+                    j = np.random.randint(num_items)  # 다시 샘플링
+
+                user_input.append(u)  # [u1, u1,  u1,  ...]
+                item_input.append(j)  # [pos_i, neg_j1, neg_j2, ...]
+                labels.append(0)      # [1, 0,  0,  ...]
+
+        return user_input, item_input, labels
