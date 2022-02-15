@@ -22,7 +22,8 @@ def ml_fedavg(client_wts):
 
 
 def distribute_client_data(data, items, users, n_clients, loader, num_neg):
-    sample_frac = 0.3
+    sample_frac = 0.35
+    test_frac = 0.04
     client_data = []
     for c in range(n_clients):
         print("Sampling data for client " + str(c))
@@ -32,6 +33,16 @@ def distribute_client_data(data, items, users, n_clients, loader, num_neg):
         user_input = np.array(user_input).reshape(-1,1)
         item_input = np.array(item_input).reshape(-1,1)
         labels = np.array(labels).reshape(-1,1)
+
+        df_test = data.sample(frac=test_frac, random_state=seed)
+        df_test = df_test.groupby(['user_id']).first()
+        df_test['user_id'] = df_test.index
+        df_test = df_test[['user_id', 'item_id', 'rating']]
+        df_test = df_test.reset_index(drop=True)
+
+        df_neg = get_negatives(s_uids, s_iids, items, df_test)
+
+
         c_data = {
             'df': df,
             'items': items,
