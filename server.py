@@ -127,7 +127,7 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
 
     hits = []
     for r in range(rounds):
-        print("="*30+" Starting round " + str(r+1)+" "+"="*30+"\n")
+        print("\n\n"+"="*30+" Starting round " + str(r+1)+" "+"="*30+"\n")
         client_wts = []
         client_item_profiles = []
         cid = 0
@@ -144,6 +144,9 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
         
         hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model.model, K=10)
         hit = np.mean(hit_lst)
+
+        print("Server side hit rate: ", hit)
+
         hits.append(hit)
     
     return hits
@@ -160,7 +163,7 @@ if __name__=="__main__":
 
     import os
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-    
+
     hits = train_server(seed, epochs, batch_size, rounds, n_clients)
     
     with open('hit_rate.npy', 'wb') as f:

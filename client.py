@@ -17,7 +17,6 @@ class Client:
         from metrics import Metric
 
         self.model = NeuMF(len(self.data['users']), len(self.data['items']))
-        print(self.model.model.summary())
         self.metric = Metric()
 
 

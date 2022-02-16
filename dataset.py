@@ -10,7 +10,6 @@ class Loader():
     def load_dataset(self):
         
         df = pd.read_csv('./ratings.csv')
-        print(df.columns)
         df = df.drop(['timestamp'], axis=1)
         df.columns = ['user', 'item', 'rating']
         df = df.dropna()
