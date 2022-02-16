@@ -2,10 +2,7 @@ import configparser
 import numpy as np
 import pandas as pd
 
-from numpy.lib.npyio import load
 from recommenders.datasets import movielens
-from recommenders.datasets.python_splitters import python_chrono_split
-from recommenders.models.ncf.dataset import Dataset as NCFDataset
 
 
 
@@ -35,13 +32,12 @@ def distribute_client_data(data, items, users, n_clients, loader, num_neg):
         labels = np.array(labels).reshape(-1,1)
 
         df_test = data.sample(frac=test_frac, random_state=seed)
+        test_uids, test_iids = loader.get_samples(df_test, items)
         df_test = df_test.groupby(['user_id']).first()
         df_test['user_id'] = df_test.index
         df_test = df_test[['user_id', 'item_id', 'rating']]
         df_test = df_test.reset_index(drop=True)
-
-        df_neg = get_negatives(s_uids, s_iids, items, df_test)
-
+        df_neg = get_negatives(test_uids, test_iids, items, df_test)
 
         c_data = {
             'df': df,
@@ -51,7 +47,9 @@ def distribute_client_data(data, items, users, n_clients, loader, num_neg):
             'iids': c_iids,
             'user_input': user_input,
             'item_input': item_input,
-            'labels': labels
+            'labels': labels,
+            'df_test': df_test,
+            'df_neg': df_neg
         }
         client_data.append(c_data)
     return client_data
@@ -72,16 +70,16 @@ def get_negatives(uids, iids, items, df_test):
         test_u = df_test['user_id'].values.tolist()
         test_i = df_test['item_id'].values.tolist()
 
-        test_ratings = list(zip(test_u, test_i))  # test (user, item)세트
-        zipped = set(zip(uids, iids))             # train (user, item)세트
+        test_ratings = list(zip(test_u, test_i))  # test (user, item)
+        zipped = set(zip(uids, iids))             # train (user, item)
 
         for (u, i) in test_ratings:
 
             negatives = []
             negatives.append((u, i))
             for t in range(100):
-                j = np.random.randint(len(items))     # neg_item j 1개 샘플링
-                while (u, j) in zipped:               # j가 train에 있으면 다시뽑고, 없으면 선택
+                j = np.random.randint(len(items))     # neg_item j 
+                while (u, j) in zipped:              
                     j = np.random.randint(len(items))
                 negatives.append(j)
             negativeList.append(negatives) # [(0,pos), neg, neg, ...]
@@ -129,15 +127,16 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
 
     hits = []
     for r in range(rounds):
-        print("Starting round " + str(r+1))
+        print("="*30+" Starting round " + str(r+1)+" "+"="*30+"\n")
         client_wts = []
         client_item_profiles = []
         cid = 0
         for client in clients:
-            print("Training client " + str(cid))
+            print("="*15+" Training client " + str(cid)+" "+"="*15)
             client.set_weights(server_wt)
             client.fit(epochs, batch_size)
             client_wts.append(client.get_weights())
+            client.validate()
             cid += 1
         
         server_wt = ml_fedavg(client_wts)
@@ -161,12 +160,7 @@ if __name__=="__main__":
 
     import os
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-    df = movielens.load_pandas_df(
-        size=ml_datasize,
-        header=["userID", "itemID", "rating", "timestamp"]
-    )
-
+    
     hits = train_server(seed, epochs, batch_size, rounds, n_clients)
     
     with open('hit_rate.npy', 'wb') as f:

@@ -55,7 +55,7 @@ class NeuMF:
         merged_vector = tf.keras.layers.concatenate([gmf_mul, mlp_layer_4])
 
         # Output layer
-        output_layer = Dense(1, kernel_initializer='lecun_uniform', name='output_layer')(merged_vector) # 1,1 / h(8,1)초기화
+        output_layer = Dense(1, kernel_initializer='lecun_uniform', name='output_layer')(merged_vector) # 1,1 / h(8,1)
 
         # Model
         self.model = Model([user, item], output_layer)
