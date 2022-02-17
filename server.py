@@ -9,6 +9,12 @@ from recommenders.datasets import movielens
 def ml_fedavg(client_wts, client_data_sizes):
     
     average_wts = {}
+    fracs = []
+    n = 0
+    for size in client_data_sizes:
+        n += size
+    for size in client_data_sizes:
+        fracs.append(size/n)
 
     #Averaging MLP weights
     average_weight_mlp=[]
