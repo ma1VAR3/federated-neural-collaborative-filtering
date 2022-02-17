@@ -6,25 +6,72 @@ from recommenders.datasets import movielens
 
 
 
-def ml_fedavg(client_wts):
-    average_weight_list=[]
-    for index1 in range(len(client_wts[0])):
+def ml_fedavg(client_wts, client_data_sizes):
+    
+    average_wts = {}
+
+    #Averaging MLP weights
+    average_weight_mlp=[]
+    for index1 in range(len(client_wts[0]['mlp'])):
         layer_weights=[]
         for index2 in range(len(client_wts)):
-            weights=client_wts[index2][index1]
+            weights=client_wts[index2]['mlp'][index1]
             layer_weights.append(weights)
         average_weight=np.mean(np.array([x for x in layer_weights]), axis=0)
-        average_weight_list.append(average_weight)
-    return average_weight_list
+        average_weight_mlp.append(average_weight)
+
+    #Averaging output layer weights
+    average_weight_output = []
+    for index1 in range(len(client_wts[0]['output'])):
+        outputs = []
+        for index2 in range(len(client_wts)):
+            weights=client_wts[index2]['output'][index1]
+            outputs.append(weights)
+        average_output=np.mean(np.array([x for x in outputs]), axis=0)
+        average_weight_output.append(average_output)
+
+    #Averaging item embeddings for GMF
+    average_item_profile_gmf = []
+    for index1 in range(len(client_wts[0]['item_embedding_gmf'])):
+        item_gmf = []
+        for index2 in range(len(client_wts)):
+            weights=client_wts[index2]['item_embedding_gmf'][index1]
+            item_gmf.append(weights)
+        average_item_gmf=np.mean(np.array([x for x in item_gmf]), axis=0)
+        average_item_profile_gmf.append(average_item_gmf)
+
+    #Averaging item embeddings for MLP
+    average_item_profile_mlp = []
+    for index1 in range(len(client_wts[0]['item_embedding_mlp'])):
+        item_mlp = []
+        for index2 in range(len(client_wts)):
+            weights=client_wts[index2]['item_embedding_mlp'][index1]
+            item_mlp.append(weights)
+        average_item_mlp=np.mean(np.array([x for x in item_mlp]), axis=0)
+        average_item_profile_mlp.append(average_item_mlp)
+
+
+    average_wts['mlp'] = average_weight_mlp
+    average_wts['output'] = average_weight_output
+    average_wts['item_embedding_gmf'] = average_item_profile_gmf
+    average_wts['item_embedding_mlp'] = average_item_profile_mlp
+    
+    return average_wts
 
 
 def distribute_client_data(data, items, users, n_clients, loader, num_neg):
-    sample_frac = 0.35
+    sample_frac = 0.10
     test_frac = 0.04
     client_data = []
     for c in range(n_clients):
         print("Sampling data for client " + str(c))
-        df = data.sample(frac=sample_frac, random_state=seed)
+        r = np.random.random_sample()
+        while r > 0.2:
+            r = np.random.random_sample()
+        sample = sample_frac + r
+        df = data.sample(frac=sample, random_state=seed)
+        length = df.shape[0]
+        print("Length ", length)
         c_uids, c_iids = loader.get_samples(df, items)
         user_input, item_input, labels = loader.get_train_instances(c_uids, c_iids, num_neg, len(items))
         user_input = np.array(user_input).reshape(-1,1)
@@ -49,7 +96,8 @@ def distribute_client_data(data, items, users, n_clients, loader, num_neg):
             'item_input': item_input,
             'labels': labels,
             'df_test': df_test,
-            'df_neg': df_neg
+            'df_neg': df_neg,
+            'length': length
         }
         client_data.append(c_data)
     return client_data
@@ -59,7 +107,7 @@ def initialize_clients(client_data, weights, epochs, batch_size, seed):
     clients = []
     for i in range(len(client_data)):
         c_d = client_data[i]
-        c = Client(c_d, epochs, batch_size, seed)
+        c = Client(c_d, epochs, batch_size, seed, i)
         c.set_weights(weights)
         clients.append(c)
     return clients
@@ -116,7 +164,7 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
 
     client_data = distribute_client_data(df, items, users, n_clients, loader, num_neg)
     
-    server_model = NeuMF(len(users), len(items))
+    server_model = NeuMF(len(users), len(items), "server")
     server_wt = server_model.get_weights()
     # server_model.set_weights(server_wt)
     # server_model.fit(s_user_input, s_item_input, s_labels, epochs, batch_size)
@@ -129,23 +177,24 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
     for r in range(rounds):
         print("\n\n"+"="*30+" Starting round " + str(r+1)+" "+"="*30+"\n")
         client_wts = []
-        client_item_profiles = []
+        client_data_sizes = []
         cid = 0
         for client in clients:
             print("="*15+" Training client " + str(cid)+" "+"="*15)
             client.set_weights(server_wt)
             client.fit(epochs, batch_size)
             client_wts.append(client.get_weights())
+            client_data_sizes.append(client.get_data_size())
             client.validate()
             cid += 1
         
-        server_wt = ml_fedavg(client_wts)
+        server_wt = ml_fedavg(client_wts, client_data_sizes)
         server_model.set_weights(server_wt)
         
         hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model.model, K=10)
         hit = np.mean(hit_lst)
 
-        print("Server side hit rate: ", hit)
+        print("\n "+"*"*10+" Server side hit rate: ", hit, " "+"*"*10)
 
         hits.append(hit)
     

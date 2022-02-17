@@ -4,35 +4,39 @@ from tensorflow.keras.models import Model
 
 class NeuMF:
 
-    def __init__(self, user_num, item_num):
+    def __init__(self, user_num, item_num, id):
 
         latent_features = 8
-
+        self.id = id
         # Input
         user = Input(shape=(1,), dtype='int32')
         item = Input(shape=(1,), dtype='int32')
 
         # User embedding for GMF
-        gmf_user_embedding = Embedding(user_num, latent_features, input_length=user.shape[1])(user)
+        gmf_user_embedding = Embedding(user_num, latent_features, input_length=user.shape[1], name="gmf_user_embedding_client_"+str(self.id))(user)
         gmf_user_embedding = Flatten()(gmf_user_embedding)
 
         # Item embedding for GMF
-        gmf_item_embedding = Embedding(item_num, latent_features, input_length=item.shape[1])(item)
-        gmf_item_embedding = Flatten()(gmf_item_embedding)
+        gmf_item_embedding = Embedding(item_num, latent_features, input_length=item.shape[1], name="gmf_item_embedding_client_"+str(self.id))
+        gmf_item_embedding_inp = gmf_item_embedding(item)
+        gmf_item_embedding_inp = Flatten()(gmf_item_embedding_inp)
 
         # User embedding for MLP
-        mlp_user_embedding = Embedding(user_num, 32, input_length=user.shape[1])(user)
+        mlp_user_embedding = Embedding(user_num, 32, input_length=user.shape[1], name="mlp_user_embedding_client_"+str(self.id))(user)
         mlp_user_embedding = Flatten()(mlp_user_embedding)
 
         # Item embedding for MLP
-        mlp_item_embedding = Embedding(item_num, 32, input_length=item.shape[1])(item)
-        mlp_item_embedding = Flatten()(mlp_item_embedding)
+        mlp_item_embedding = Embedding(item_num, 32, input_length=item.shape[1], name="mlp_item_embedding_client_"+str(self.id))
+        mlp_item_embedding_inp = mlp_item_embedding(item)
+        mlp_item_embedding_inp = Flatten()(mlp_item_embedding_inp)
 
+        self.item_embedding_mlp = mlp_item_embedding
+        self.item_embeddin_gmf = gmf_item_embedding
         # GMF layers
-        gmf_mul =  Multiply()([gmf_user_embedding, gmf_item_embedding])
+        gmf_mul =  Multiply()([gmf_user_embedding, gmf_item_embedding_inp])
 
         # MLP layers
-        mlp_concat = Concatenate()([mlp_user_embedding, mlp_item_embedding])
+        mlp_concat = Concatenate()([mlp_user_embedding, mlp_item_embedding_inp])
         mlp_dropout = Dropout(0.2)(mlp_concat)
 
         # Layer1
@@ -55,10 +59,15 @@ class NeuMF:
         merged_vector = tf.keras.layers.concatenate([gmf_mul, mlp_layer_4])
 
         # Output layer
-        output_layer = Dense(1, kernel_initializer='lecun_uniform', name='output_layer')(merged_vector) # 1,1 / h(8,1)
+        output_layer = Dense(1, kernel_initializer='lecun_uniform', name='output_layer', activation='sigmoid') # 1,1 / h(8,1)
+        output_layer_out = output_layer(merged_vector)
+        output_dummy = Dense(1, kernel_initializer='lecun_uniform', name='output_layer', activation='sigmoid')(mlp_layer_4)
+
+        self.output = output_layer
 
         # Model
-        self.model = Model([user, item], output_layer)
+        self.model = Model([user, item], output_layer_out)
+        self.mlp = Model([user, item], output_dummy)
         self.model.compile(optimizer= 'adam', loss= 'binary_crossentropy')
 
     def get_model(self):
@@ -66,10 +75,23 @@ class NeuMF:
         return model
 
     def get_weights(self):
-        return self.model.get_weights()
+        mlp_wt = self.mlp.get_weights()
+        item_mlp = self.item_embedding_mlp.get_weights()
+        item_gmf = self.item_embeddin_gmf.get_weights()
+        output = self.output.get_weights()
+        wts = {
+            "item_embedding_mlp": item_mlp,
+            "item_embedding_gmf": item_gmf,
+            "mlp": mlp_wt,
+            "output": output
+        }
+        return wts
 
     def set_weights(self, weights):
-        self.model.set_weights(weights)
+        self.mlp.set_weights(weights['mlp'])
+        self.output.set_weights(weights['output'])
+        self.item_embedding_mlp.set_weights(weights['item_embedding_mlp'])
+        self.item_embeddin_gmf.set_weights(weights['item_embedding_gmf'])
 
     def fit(self, user_data, item_data, labels, epochs, batch_size):
         self.model.fit([user_data, item_data], labels, epochs=epochs, batch_size=batch_size)

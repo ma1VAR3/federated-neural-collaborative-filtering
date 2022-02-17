@@ -5,18 +5,20 @@ class Client:
         epochs,
         batch_size,
         seed,
+        id
     ):
         self.data = data
-        self.epochs = epochs
+        self.epochs = epochs 
         self.batch_size = batch_size
         self.seed = seed
+        self.id = id
         self._set_model()
 
     def _set_model(self):
         from NCF import NeuMF
         from metrics import Metric
 
-        self.model = NeuMF(len(self.data['users']), len(self.data['items']))
+        self.model = NeuMF(len(self.data['users']), len(self.data['items']), self.id)
         self.metric = Metric()
 
 
@@ -25,6 +27,9 @@ class Client:
 
     def get_weights(self):
         return self.model.get_weights()
+
+    def get_data_size(self):
+        return self.data['length']
 
     def fit(self, epochs, batch_size):
         
