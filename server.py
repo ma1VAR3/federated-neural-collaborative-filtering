@@ -2,10 +2,6 @@ import configparser
 import numpy as np
 import pandas as pd
 
-from recommenders.datasets import movielens
-
-
-
 def ml_fedavg(client_wts, client_data_sizes):
     
     average_wts = {}
@@ -22,7 +18,7 @@ def ml_fedavg(client_wts, client_data_sizes):
         layer_weights=[]
         for index2 in range(len(client_wts)):
             weights=client_wts[index2]['mlp'][index1]
-            layer_weights.append(weights)
+            layer_weights.append(fracs[index2]*weights)
         average_weight=np.mean(np.array([x for x in layer_weights]), axis=0)
         average_weight_mlp.append(average_weight)
 
@@ -32,7 +28,7 @@ def ml_fedavg(client_wts, client_data_sizes):
         outputs = []
         for index2 in range(len(client_wts)):
             weights=client_wts[index2]['output'][index1]
-            outputs.append(weights)
+            outputs.append(fracs[index2]*weights)
         average_output=np.mean(np.array([x for x in outputs]), axis=0)
         average_weight_output.append(average_output)
 
@@ -42,7 +38,7 @@ def ml_fedavg(client_wts, client_data_sizes):
         item_gmf = []
         for index2 in range(len(client_wts)):
             weights=client_wts[index2]['item_embedding_gmf'][index1]
-            item_gmf.append(weights)
+            item_gmf.append(fracs[index2]*weights)
         average_item_gmf=np.mean(np.array([x for x in item_gmf]), axis=0)
         average_item_profile_gmf.append(average_item_gmf)
 
@@ -52,7 +48,7 @@ def ml_fedavg(client_wts, client_data_sizes):
         item_mlp = []
         for index2 in range(len(client_wts)):
             weights=client_wts[index2]['item_embedding_mlp'][index1]
-            item_mlp.append(weights)
+            item_mlp.append(fracs[index2]*weights)
         average_item_mlp=np.mean(np.array([x for x in item_mlp]), axis=0)
         average_item_profile_mlp.append(average_item_mlp)
 
