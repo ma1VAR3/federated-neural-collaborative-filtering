@@ -15,5 +15,5 @@ def plot(training_round):
     
     plt.show()
 
-arr = np.arange(0,15)
+arr = np.arange(0,150)
 plot(arr)
