@@ -40,3 +40,10 @@ class Client:
         hit_lst = self.metric.evaluate_top_k(self.data['df_neg'], self.data['df_test'], self.model.model, K=10)
         hit_rate = np.mean(hit_lst)
         print("Client hit rate: ", hit_rate)
+
+    def print_user_embeddings(self):
+        print("User Embedding GMF: \n")
+        print(self.model.user_embedding_gmf.get_weights()[0][0])
+        print("\n")
+        # print("User Embedding MLP: \n")
+        # print(self.model.user_embedding_mlp.get_weights())

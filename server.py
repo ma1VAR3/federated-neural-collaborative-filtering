@@ -181,20 +181,42 @@ def train_server(seed, epochs, batch_size, rounds, n_clients):
         client_wts = []
         client_data_sizes = []
         cid = 0
+
+        print("\nPrinting client 0 user embedding before the start of round\n")
+        clients[0].print_user_embeddings()
+
+        print("\nPrinting server model user embedding before the start of round\n")
+        print(server_model.user_embedding_gmf.get_weights()[0][0])
+
         for client in clients:
             print("="*15+" Training client " + str(cid)+" "+"="*15)
             client.set_weights(server_wt)
+            if client.id == 0:
+                print("\nAfter setting weights, before training client 0: \n")
+                client.print_user_embeddings()
             client.fit(epochs, batch_size)
+            if client.id == 0:
+                print("\nAfter training client 0: \n")
+                client.print_user_embeddings()
             client_wts.append(client.get_weights())
             client_data_sizes.append(client.get_data_size())
             client.validate()
             cid += 1
         
+        # print("\nPrinting client 0 user embedding after collecting weights \n")
+        # clients[0].print_user_embeddings()
+
         server_wt = ml_fedavg(client_wts, client_data_sizes)
         server_model.set_weights(server_wt)
         
         hit_lst = metric.evaluate_top_k(df_neg, df_test, server_model.model, K=10)
         hit = np.mean(hit_lst)
+
+        print("\nPrinting client 0 user embedding after the end of round \n")
+        clients[0].print_user_embeddings()
+
+        print("\nPrinting server model user embedding after the end of round\n")
+        print(server_model.user_embedding_gmf.get_weights()[0][0])
 
         print("\n "+"*"*10+" Server side hit rate: ", hit, " "+"*"*10)
 

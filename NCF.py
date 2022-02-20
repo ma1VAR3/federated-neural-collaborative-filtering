@@ -13,8 +13,9 @@ class NeuMF:
         item = Input(shape=(1,), dtype='int32')
 
         # User embedding for GMF
-        gmf_user_embedding = Embedding(user_num, latent_features, input_length=user.shape[1], name="gmf_user_embedding_client_"+str(self.id))(user)
-        gmf_user_embedding = Flatten()(gmf_user_embedding)
+        gmf_user_embedding = Embedding(user_num, latent_features, input_length=user.shape[1], name="gmf_user_embedding_client_"+str(self.id))
+        gmf_user_embedding_inp = gmf_user_embedding(user)
+        gmf_user_embedding_inp = Flatten()(gmf_user_embedding_inp)
 
         # Item embedding for GMF
         gmf_item_embedding = Embedding(item_num, latent_features, input_length=item.shape[1], name="gmf_item_embedding_client_"+str(self.id))
@@ -22,21 +23,24 @@ class NeuMF:
         gmf_item_embedding_inp = Flatten()(gmf_item_embedding_inp)
 
         # User embedding for MLP
-        mlp_user_embedding = Embedding(user_num, 32, input_length=user.shape[1], name="mlp_user_embedding_client_"+str(self.id))(user)
-        mlp_user_embedding = Flatten()(mlp_user_embedding)
+        mlp_user_embedding = Embedding(user_num, 32, input_length=user.shape[1], name="mlp_user_embedding_client_"+str(self.id))
+        mlp_user_embedding_inp = mlp_user_embedding(user)
+        mlp_user_embedding_inp = Flatten()(mlp_user_embedding_inp)
 
         # Item embedding for MLP
         mlp_item_embedding = Embedding(item_num, 32, input_length=item.shape[1], name="mlp_item_embedding_client_"+str(self.id))
         mlp_item_embedding_inp = mlp_item_embedding(item)
         mlp_item_embedding_inp = Flatten()(mlp_item_embedding_inp)
 
+        self.user_embedding_mlp = mlp_user_embedding
+        self.user_embedding_gmf = gmf_user_embedding
         self.item_embedding_mlp = mlp_item_embedding
         self.item_embeddin_gmf = gmf_item_embedding
         # GMF layers
-        gmf_mul =  Multiply()([gmf_user_embedding, gmf_item_embedding_inp])
+        gmf_mul =  Multiply()([gmf_user_embedding_inp, gmf_item_embedding_inp])
 
         # MLP layers
-        mlp_concat = Concatenate()([mlp_user_embedding, mlp_item_embedding_inp])
+        mlp_concat = Concatenate()([mlp_user_embedding_inp, mlp_item_embedding_inp])
         mlp_dropout = Dropout(0.2)(mlp_concat)
 
         # Layer1
